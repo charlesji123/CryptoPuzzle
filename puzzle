@@ -1,47 +1,18 @@
 // SPDX-License-Identifier: Princeton
-pragma solidity ^0.6.6;
+pragma solidity ^0.8.1;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-
-contract puzzleReward is ERC721 {
-  uint256 public tokenCounter;
-  constructor () public ERC721 ("Puzzle", "PUZ"){
-    tokenCounter = 0;
-  }
-
-  function createCollectible(string memory tokenURI) public returns (uint256) {
-    uint256 newItemId = tokenCounter;
-    _safeMint(msg.sender, newItemId);
-    _setTokenURI(newItemId, tokenURI);
-    tokenCounter = tokenCounter + 1;
-    return newItemId;
-  }
-}
-
-// create $PUZZ token
-import "@openzeppelin/contracts@4.5.0/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts@4.5.0/access/Ownable.sol";
-
-contract ERC20Puzz is ERC20, Ownable {
-    constructor() ERC20("Puzzle", "PUZZ") {
-        _mint(msg.sender, 10000 * 10 ** decimals());
-    }
-
-    function mint(address to, uint256 amount) public onlyOwner {
-        _mint(to, amount);
-    }
-}
-
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 // assuming input is one wallet and one puzzle 
 contract puzzle {
-    address payable userAddress; // input the user's wallet
+    address userAddress; // input the user's wallet
     mapping (uint => address) puzzleidToOwner;
     mapping (uint => bool) notforSale;
     mapping (uint => uint) puzzleStartTime;
     uint puzzleID;
 
-    ERC20 public token;
+    IERC20 public token;
     ERC721 public rewardNFT;
 
     uint constant entryfeeperPuzzle = 1;
@@ -53,19 +24,17 @@ contract puzzle {
     event BoughtToken(uint amount);
     event NFTRewarded (address indexed _sender, address indexed _receipient);
 
-
     constructor(address _userAddress, uint _puzzleID) public {
         userAddress = _userAddress;
         puzzleID = _puzzleID;
-        token = new ERC20Puzz();
-        rewardNFT = new puzzleReward();
+        token = new ERC20Puzz(); // need to call another contract
+        rewardNFT = new puzzleReward(); // need to call another contract
     }
 
     // can users directlty buy token on the smart contract
     function buyToken(uint256 amount) public {
         require(amount > 0, "You need to sell at least some tokens");
-        uint256 allowance = token.allowance(msg.sender, address(this));
-        require(allowance >= amount, "Check the token allowance");
+        require(msg.sender.balance >= amount, "Check the token allowance");
         token.transferFrom(msg.sender, address(this), amount);
         payable(msg.sender).transfer(amount);
         emit BoughtToken(amount);
@@ -76,13 +45,11 @@ contract puzzle {
         require (msg.sender == tx.origin, "unverified transaction");
         require (notforSale[puzzleID] == false, "unverified transaction");
 
-        uint256 allowance = token.allowance(msg.sender, address(this)); // ask?
-        require (msg.sender.balances >= entryfeeperPuzzle + tx.gasprice, "not enough money");
-        // ERC20Token(address(token)).mint();
-        // send $PUZZ to the wallet
+        uint256 allowance = token.allowance(msg.sender, address(this)); 
+        // gas fee paid in eth or puzz????
+        require (allowance >= entryfeeperPuzzle && msg.sender.balance >= tx.gasprice, "not enough money");
 
         // users transfer the token to the puzzle account 
-        // Token token = new Puzzle;
         token.transferFrom(msg.sender, address(this), amount);
         puzzleidToOwner[puzzleID] = userAddress;
 
@@ -95,27 +62,26 @@ contract puzzle {
 
         emit BoughtPuzzle(msg.sender, puzzleID, startingTime);
         }
- 
-        // how to create puzzle nfts - no need 
-        // how to use enum - use hash map
-        // how to specify token 
-        // wallet transfer 
-
 
     // user submits their solution: how to make sure users call the function when they are correct
     function Submit(uint id, uint difLevel, bool isCorrect) public {
         uint endingTime = block.timestamp;
         require (puzzleidToOwner[id] == msg.sender, "not verified owner");
-        require (endingTime - puzzleStartTime[id] <= expireTime, "puzzle expired"); //?
-
-        if (isCorrect) {
-
+        require (endingTime - puzzleStartTime[id] <= expireTime, "puzzle expired"); 
+        require (isCorrect == true, "puzzle not solved"); 
+        
         // send users the reward $PUZZ token and the reward NFT
         uint rewardToken = difLevel / (endingTime-puzzleStartTime[id]);
         token.transferFrom(msg.sender, address(this), rewardToken); 
-        _transferFrom(msg.sender, address(this), rewardNFT);
+        token.transferFrom(msg.sender, address(this), rewardNFT);
 
         emit NFTRewarded (address(this), msg.sender);
-        }
     }
+
+
     }
+
+
+
+
+  
